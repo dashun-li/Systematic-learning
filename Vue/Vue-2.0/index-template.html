@@ -8,23 +8,28 @@
 </head>
 <body>
     <div id="app">
-        11
-        <div class="test">
-            {{name}}
-        </div>
-        <span>爱好:{{hobby[0]}} <span>{{age}}</span></span>
+        {{name}}: {{age}}
     </div>
     <script src="./dist/vue.js"></script>
     <script>
         // 响应式数据变化
         const vm = new Vue({
-            el:"#app",
+            el:"#app", //将数据解析到app上
             data:{ //代理数据
                 name:"zf",
                 age: 10,
                 hobby:["eat", "drink",{a:111}]
             }
         })
+        /** 实现数据与页面绑定
+         * 1.模板引擎 性能差   1.0 没有引入虚拟dom的改变
+         * 2.虚拟dom 数据变化后比较虚拟dom的差异，最后更新需要更新的地方
+         * 3. 核心就是 将模板变成 js语法，通过js生成虚拟dom
+         *     3.1 从 A -> B 做语法之间的转换
+         *         将A变成语法树，再重新组装变成B
+         *          将template 转化为render
+         * */
+
     </script>
 </body>
 </html>
