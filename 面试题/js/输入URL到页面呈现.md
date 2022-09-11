@@ -1,4 +1,4 @@
-b#### 输入URL到页面呈现
+#### 输入URL到页面呈现
 * DNS域名解析
 ``` mermaid
 graph LR
@@ -38,7 +38,8 @@ TCP头部定义的8位字段，标识了该段TCP报文的作用:
 seq：当前报文序号，它指发送端--> 接收端的数据流的一个字节，且为包含该序号的报文段的数据的第一个字节。
 ack: 回复序号，指的是回应对端已收到序号seq的报文，需要ack为序号开头的报文段。 
 
-文章摘抄参考：
+参考：
 https://zhuanlan.zhihu.com/p/134646537 作者：该用户已成仙
 https://www.jianshu.com/p/9a340cfedb86 作者：逍遥妙算
 https://blog.csdn.net/weixin_48824655/article/details/125324042 作者：小菜哈哈哈哈
+https://blog.csdn.net/qq_40337086/article/details/112443124 作者：况祥彬
