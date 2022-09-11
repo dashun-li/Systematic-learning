@@ -4,6 +4,100 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  function _typeof(obj) {
+    "@babel/helpers - typeof";
+
+    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) {
+      return typeof obj;
+    } : function (obj) {
+      return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
+    }, _typeof(obj);
+  }
+
+  function _classCallCheck(instance, Constructor) {
+    if (!(instance instanceof Constructor)) {
+      throw new TypeError("Cannot call a class as a function");
+    }
+  }
+
+  function _defineProperties(target, props) {
+    for (var i = 0; i < props.length; i++) {
+      var descriptor = props[i];
+      descriptor.enumerable = descriptor.enumerable || false;
+      descriptor.configurable = true;
+      if ("value" in descriptor) descriptor.writable = true;
+      Object.defineProperty(target, descriptor.key, descriptor);
+    }
+  }
+
+  function _createClass(Constructor, protoProps, staticProps) {
+    if (protoProps) _defineProperties(Constructor.prototype, protoProps);
+    if (staticProps) _defineProperties(Constructor, staticProps);
+    Object.defineProperty(Constructor, "prototype", {
+      writable: false
+    });
+    return Constructor;
+  }
+
+  function _slicedToArray(arr, i) {
+    return _arrayWithHoles(arr) || _iterableToArrayLimit(arr, i) || _unsupportedIterableToArray(arr, i) || _nonIterableRest();
+  }
+
+  function _arrayWithHoles(arr) {
+    if (Array.isArray(arr)) return arr;
+  }
+
+  function _iterableToArrayLimit(arr, i) {
+    var _i = arr == null ? null : typeof Symbol !== "undefined" && arr[Symbol.iterator] || arr["@@iterator"];
+
+    if (_i == null) return;
+    var _arr = [];
+    var _n = true;
+    var _d = false;
+
+    var _s, _e;
+
+    try {
+      for (_i = _i.call(arr); !(_n = (_s = _i.next()).done); _n = true) {
+        _arr.push(_s.value);
+
+        if (i && _arr.length === i) break;
+      }
+    } catch (err) {
+      _d = true;
+      _e = err;
+    } finally {
+      try {
+        if (!_n && _i["return"] != null) _i["return"]();
+      } finally {
+        if (_d) throw _e;
+      }
+    }
+
+    return _arr;
+  }
+
+  function _unsupportedIterableToArray(o, minLen) {
+    if (!o) return;
+    if (typeof o === "string") return _arrayLikeToArray(o, minLen);
+    var n = Object.prototype.toString.call(o).slice(8, -1);
+    if (n === "Object" && o.constructor) n = o.constructor.name;
+    if (n === "Map" || n === "Set") return Array.from(o);
+    if (n === "Arguments" || /^(?:Ui|I)nt(?:8|16|32)(?:Clamped)?Array$/.test(n)) return _arrayLikeToArray(o, minLen);
+  }
+
+  function _arrayLikeToArray(arr, len) {
+    if (len == null || len > arr.length) len = arr.length;
+
+    for (var i = 0, arr2 = new Array(len); i < len; i++) arr2[i] = arr[i];
+
+    return arr2;
+  }
+
+  function _nonIterableRest() {
+    throw new TypeError("Invalid attempt to destructure non-iterable instance.\nIn order to be iterable, non-array objects must have a [Symbol.iterator]() method.");
+  }
+
   /**
    * 1.通过遍历html字符串利用正则匹配开始、文本、结束标签
    * 2.每匹配一个字符串就将解析的结果通过ast处理函数处理为ast树形结构
@@ -19,8 +113,7 @@
   var endTag = new RegExp("^<\\/".concat(qnameCapture, "[^>]*>")); //第一组匹配key value匹配 分组3、4、5
 
   var attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
-  var startTagclose = /^\s*(\/?)>/;
-  // 边解析边删除已解析的模板
+  var startTagclose = /^\s*(\/?)>/; // 边解析边删除已解析的模板
 
   function parseHTML(html) {
     var ELEMENT_TYPE = 1;
@@ -28,6 +121,8 @@
     var stack = []; //用来放元素
 
     var currentParent; // 指向栈中的最后一个
+
+    var root; // 其中的一个节点
 
     function createASTElement(tag, attrs) {
       return {
@@ -42,6 +137,11 @@
 
     function start(tag, attrs) {
       var node = createASTElement(tag, attrs);
+
+      if (!root) {
+        //判断是否为根节点
+        root = node;
+      }
 
       if (currentParent) {
         // 储存当前节点的父元素，并将节点push进父元素的子栈
@@ -140,47 +240,253 @@
         continue;
       }
     }
+
+    return root;
+  }
+
+  var defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; //匹配的 {{XXX}} 表达式
+  // 处理dom属性
+
+  function genProps(attrs) {
+    var str = ""; //{name, value}
+
+    for (var i = 0; i < attrs.length; i++) {
+      var attr = attrs[i];
+
+      if (attr.name == "style") {
+        (function () {
+          // color: red => {color： "red"}
+          var obj = {};
+          attr.value.split(";").forEach(function (item) {
+            var _item$split = item.split(":"),
+                _item$split2 = _slicedToArray(_item$split, 2),
+                key = _item$split2[0],
+                value = _item$split2[1];
+
+            obj[key] = value;
+          });
+          attr.value = obj;
+        })();
+      }
+
+      str += "".concat(attr.name, ":").concat(JSON.stringify(attr.value), ",");
+    }
+
+    return "{".concat(str.slice(0, -1), "}");
+  }
+
+  function gen(node) {
+    if (node.type === 1) {
+      return codegen(node);
+    } else {
+      //文本
+      // 1.模板字符串 2.纯文本
+      var text = node.text;
+
+      if (!defaultTagRE.test(text)) {
+        return "_v(".concat(JSON.stringify(text), ")");
+      } else {
+        //_v(_s(name) + 'hello' + _s(name))
+        var tokens = [];
+        var match;
+        var lastIndex = 0; // exec + 全局匹配/s/g 要重置顺序
+        // 在全局模式下，当 exec() 找到了与表达式相匹配的文本时，在匹配后，它将把正则表达式对象的 lastIndex 属性设置为匹配文本的最后一个字符的下一个位置。这就是说，您可以通过反复调用 exec() 方法来遍历字符串中的所有匹配文本。当 exec() 再也找不到匹配的文本时，它将返回 null，并把 lastIndex 属性重置为 0。
+
+        defaultTagRE.lastIndex = 0;
+
+        while (match = defaultTagRE.exec(text)) {
+          var index = match.index; //匹配的位置， 便于取两个模板字符串中间的字符串 {{name}} hello {{age}}
+
+          if (index > lastIndex) {
+            tokens.push(JSON.stringify(text.slice(lastIndex, index)));
+          }
+
+          tokens.push("_s(".concat(match[1].trim(), ")"));
+          lastIndex = index + match[0].length;
+        } // {{a}} hello
+
+
+        if (lastIndex < text.length) {
+          tokens.push(JSON.stringify(text.slice(lastIndex)));
+        }
+
+        return "_v(".concat(tokens.join("+"), ")");
+      }
+    }
+  }
+
+  function genChildren(el) {
+    var children = el.children;
+
+    if (children) {
+      return children.map(function (child) {
+        return gen(child);
+      }).join(",");
+    }
+  }
+
+  function codegen(ast) {
+    var children = genChildren(ast);
+    var code = "_c(\"".concat(ast.tag, "\",").concat(ast.attrs.length > 0 ? genProps(ast.attrs) : null).concat(ast.children.length ? ",".concat(children) : "", "\n  )");
+    return code;
   }
 
   function compileToFunction(template) {
     // 将template 转化成ast语法树
-    parseHTML(template); // 生成render方法 （render方法返回结果就是 虚拟dom)
+    var ast = parseHTML(template); // 生成render方法 （render方法返回结果就是 虚拟dom)
+    // 模板引擎实现原理: with + new Function
+
+    var code = codegen(ast); // with (Math) {
+    //   a = PI * r * r;
+    //   x = r * cos(PI);
+    //   y = r * sin(PI / 2);
+    // }
+
+    code = "with(this){ return ".concat(code, " }");
+    var render = new Function(code);
+    return render; // render () {
+    //   return _c("div",{
+    //     id:"app"
+    //   },_c("div",{style:"red"}),_v(_s(name)+hello))
+    // }
   }
 
-  function _typeof(obj) {
-    "@babel/helpers - typeof";
+  function creatElementVnode(vm, tag, props) {
+    if (props == null) {
+      props = {};
+    }
 
-    return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (obj) {
-      return typeof obj;
-    } : function (obj) {
-      return obj && "function" == typeof Symbol && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj;
-    }, _typeof(obj);
+    var key = props.key;
+
+    if (key) {
+      delete props.key;
+    }
+
+    for (var _len = arguments.length, children = new Array(_len > 3 ? _len - 3 : 0), _key = 3; _key < _len; _key++) {
+      children[_key - 3] = arguments[_key];
+    }
+
+    return vnode(vm, tag, key, props, children);
+  }
+  function creatTextVNode(vm, text) {
+    return vnode(vm, undefined, undefined, undefined, undefined, text);
+  } // ast 做的语法层面的转化，他描述的是语法本身（描述 js css html ）
+  // 虚拟dom描述的是dom元素，可以增加自定义属性
+
+  function vnode(vm, tag, key, props, children, text) {
+    return {
+      vm: vm,
+      tag: tag,
+      key: key,
+      props: props,
+      children: children,
+      text: text
+    };
   }
 
-  function _classCallCheck(instance, Constructor) {
-    if (!(instance instanceof Constructor)) {
-      throw new TypeError("Cannot call a class as a function");
+  function createElm(vnode) {
+    var tag = vnode.tag,
+        props = vnode.props,
+        children = vnode.children,
+        text = vnode.text;
+
+    if (typeof tag === "string") {
+      vnode.el = document.createElement(tag); // 将真实节点与虚拟节点相对应，后续属性修改方便操作真实节点
+
+      patchProps(vnode.el, props);
+      children.forEach(function (child) {
+        vnode.el.appendChild(createElm(child));
+      });
+    } else {
+      //文本
+      vnode.el = document.createTextNode(text);
+    }
+
+    return vnode.el;
+  } // 更新属性
+
+
+  function patchProps(el, props) {
+    for (var key in props) {
+      if (key === "style") {
+        for (var styleName in props.style) {
+          el.style[styleName] = props.style[styleName];
+        }
+      } else {
+        el.setAttribute(key, props[key]);
+      }
     }
   }
 
-  function _defineProperties(target, props) {
-    for (var i = 0; i < props.length; i++) {
-      var descriptor = props[i];
-      descriptor.enumerable = descriptor.enumerable || false;
-      descriptor.configurable = true;
-      if ("value" in descriptor) descriptor.writable = true;
-      Object.defineProperty(target, descriptor.key, descriptor);
+  function patch(oldVnode, vNode) {
+    // 初次渲染
+    var isRealElement = oldVnode.nodeType; //dom属性
+
+    if (isRealElement) {
+      var elm = oldVnode; //获取真实元素
+
+      var parentElm = elm.parentNode; //获取父元素
+
+      var newElem = createElm(vNode); //创建真实元素
+
+      parentElm.insertBefore(newElem, elm.nextSibling); //将新的元素插入老的元素之后
+
+      parentElm.removeChild(elm); //删除老的元素
+
+      return newElem;
     }
   }
 
-  function _createClass(Constructor, protoProps, staticProps) {
-    if (protoProps) _defineProperties(Constructor.prototype, protoProps);
-    if (staticProps) _defineProperties(Constructor, staticProps);
-    Object.defineProperty(Constructor, "prototype", {
-      writable: false
-    });
-    return Constructor;
+  function initLifeCycle(Vue) {
+    Vue.prototype._update = function (vnode) {
+      //虚拟dom转化为真实Dom
+      var vm = this;
+      var el = vm.$el; // patch 既有初始化又有更新
+
+      patch(el, vnode);
+    }; // _c("div", {}, ...children)
+
+
+    Vue.prototype._c = function () {
+      return creatElementVnode.apply(void 0, [this].concat(Array.prototype.slice.call(arguments)));
+    }; // _v(text)
+
+
+    Vue.prototype._v = function () {
+      return creatTextVNode.apply(void 0, [this].concat(Array.prototype.slice.call(arguments)));
+    };
+
+    Vue.prototype._s = function (value) {
+      var str = typeof value === "string" ? value : JSON.stringify(value);
+      return str;
+    };
+
+    Vue.prototype._render = function () {
+      // 渲染的时候，去实例取值，这里就将数据与视图绑定
+      var vm = this;
+      return vm.$options.render.call(vm); // 通过ast转移后生成的render方法
+    };
   }
+  function mountComponent(vm, el) {
+    // el 是通过css选择器获取的真实dom
+    vm.$el = el; // 1. 调用 render产生虚拟节点  虚拟 DOM
+
+    vm.$el = vm._update(vm._render()); //vm.$options.render() 虚拟节点
+    // 2.根据虚拟DOM产生真实DOM
+    // 3.插入el元素中
+  }
+  /**
+   * Vue 核心流程
+   *
+   * 1. 创造响应式数据
+   * 2. 模板转化为ast语法树
+   * 3. 将ast语法树转化为render函数
+   * 4. 后续每次数据更新可以只执行render
+   *
+   * render函数会产生虚拟节点（通过使用响应式数据）
+   * 根据生成的虚拟节点创造真实DOM
+   *
+   */
 
   // 重写数组中方法
   var oldArrayPro = Array.prototype; // newArrayProto.__proto__ = oldArrayPro 保证Array的方法不改变
@@ -280,7 +586,6 @@
     observe(value);
     Object.defineProperty(target, key, {
       get: function get() {
-        console.log(key);
         return value;
       },
       set: function set(newValue) {
@@ -376,7 +681,7 @@
         }
       }
 
-      ops.render; //统一使用render方法
+      mountComponent(vm, el); //组件挂载 调用render
       //script 标签引用的vue.gloabal.js 这个编译过程在浏览器运行
       // runtime不包含模板编译，整个编译过程是打包的时候loader来转义.vue文件，用runtime时不能使用 template:""
     };
@@ -386,7 +691,9 @@
     this._init(options);
   }
 
-  initMixin(Vue);
+  initMixin(Vue); //挂载init方法
+
+  initLifeCycle(Vue);
 
   return Vue;
 

@@ -1,5 +1,7 @@
 import { compileToFunction } from "./compiler/index";
+import { mountComponent } from "./lifecycle";
 import { initState } from "./state";
+
 
 export function initMixin(Vue) {
 
@@ -32,7 +34,7 @@ export function initMixin(Vue) {
                 ops.render = render; //jsx 最终编译程 h("xxx")
             }
         }
-        ops.render; //统一使用render方法
+        mountComponent(vm, el) //组件挂载 调用render
         //script 标签引用的vue.gloabal.js 这个编译过程在浏览器运行
         // runtime不包含模板编译，整个编译过程是打包的时候loader来转义.vue文件，用runtime时不能使用 template:""
 

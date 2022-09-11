@@ -38,7 +38,6 @@ export function defineReactive(target, key, value) { //闭包 属性劫持
     observe(value);
     Object.defineProperty(target, key, {
         get() { 
-            console.log(key)
             return value
         },
         set(newValue) {

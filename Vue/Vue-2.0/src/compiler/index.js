@@ -1,133 +1,94 @@
-/**
- * 1.通过遍历html字符串利用正则匹配开始、文本、结束标签
- * 2.每匹配一个字符串就将解析的结果通过ast处理函数处理为ast树形结构
- * 3.每解析完一个标签，在html字符串中删除
- * 4.ast属性结构的函数处理
- *    通过栈的方式储存父节点，父节点始终在栈的最底层
- */
-
-
-const ncname = `[a-zA-Z_][\\-\\.0-9_a-zA-Z]*`;
-const qnameCapture = `((?:${ncname}\\:)?${ncname})`;
-//匹配的分组时标签名
-const startTagopen = new RegExp(`^<${qnameCapture}`);
-//结束标签</XXX>
-const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`);
-//第一组匹配key value匹配 分组3、4、5
-const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;
-const startTagclose = /^\s*(\/?)>/;
+import { parseHTML } from "./parse";
 const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; //匹配的 {{XXX}} 表达式
 
-// 边解析边删除已解析的模板
-function parseHTML(html) {
-  const ELEMENT_TYPE = 1;
-  const TEXT_TYPE = 3;
-  const stack = []; //用来放元素
-  let currentParent; // 指向栈中的最后一个
-  let root;
+// 处理dom属性
+function genProps(attrs) {
+  let str = ""; //{name, value}
+  for (let i = 0; i < attrs.length; i++) {
+    let attr = attrs[i];
+    if (attr.name == "style") {
+      // color: red => {color： "red"}
+      let obj = {};
+      attr.value.split(";").forEach((item) => {
+        let [key, value] = item.split(":");
+        obj[key] = value;
+      });
+      attr.value = obj
+    }
 
-  // 其中的一个节点
-function createASTElement(tag, attrs) {
-  return {
-    tag,
-    type: ELEMENT_TYPE,
-    children:[],
-    attrs,
-    parent:null
+    str += `${attr.name}:${JSON.stringify(attr.value)},`;
+  }
+  return `{${str.slice(0, -1)}}`;
+}
+
+function gen(node) {
+  if (node.type === 1) {
+    return codegen(node);
+  } else {
+    //文本
+    // 1.模板字符串 2.纯文本
+    let text = node.text;
+    if (!defaultTagRE.test(text)) {
+      return `_v(${JSON.stringify(text)})`;
+    } else {
+      //_v(_s(name) + 'hello' + _s(name))
+      let tokens = [];
+      let match;
+      let lastIndex = 0;
+      // exec + 全局匹配/s/g 要重置顺序
+      // 在全局模式下，当 exec() 找到了与表达式相匹配的文本时，在匹配后，它将把正则表达式对象的 lastIndex 属性设置为匹配文本的最后一个字符的下一个位置。这就是说，您可以通过反复调用 exec() 方法来遍历字符串中的所有匹配文本。当 exec() 再也找不到匹配的文本时，它将返回 null，并把 lastIndex 属性重置为 0。
+      defaultTagRE.lastIndex = 0;
+      while ((match = defaultTagRE.exec(text))) {
+        let index = match.index; //匹配的位置， 便于取两个模板字符串中间的字符串 {{name}} hello {{age}}
+        if (index > lastIndex) {
+          tokens.push(JSON.stringify(text.slice(lastIndex, index)));
+        }
+        tokens.push(`_s(${match[1].trim()})`);
+        lastIndex = index + match[0].length;
+      }
+      // {{a}} hello
+      if (lastIndex < text.length) {
+        tokens.push(JSON.stringify(text.slice(lastIndex)));
+      }
+      return `_v(${tokens.join("+")})`;
+    }
   }
 }
 
-  // 最终转换为抽象语法树
-  function start (tag, attrs){
-    let node =  createASTElement(tag, attrs);
-    if(!root){ //判断是否为根节点
-      root = node;
-    }
-    if(currentParent){
-      // 储存当前节点的父元素，并将节点push进父元素的子栈
-      node.parent = currentParent;
-      currentParent.children.push(node);
-    }
-    stack.push(node); 
-    currentParent = node; // 栈中的最后一个
+function genChildren(el) {
+  const children = el.children;
+  if (children) {
+    return children.map((child) => gen(child)).join(",");
   }
-  function chars (text){
-    text = text.replace(/\s/g,"")
-    text && currentParent.children.push({
-      type:TEXT_TYPE,
-      text,
-      parent: currentParent
-    })
+}
 
-  }
-  function end (){
-    stack.pop();
-    currentParent = stack[stack.length - 1]
-  }
-  // 一边解析一边删除已经解析过的html字符串
-  function advance(n) {
-    html = html.substring(n);
-  }
-  // 解析开始标签
-  function parseStartTag() {
-    const start = html.match(startTagopen);
-    if (start) {
-      const match = {
-        tagName: start[1],
-        attrs: [], //标签属性
-      };
-      advance(start[0].length);
-
-      let attr, end;
-      // 记录属性并删除
-      while (
-        !(end = html.match(startTagclose)) &&
-        (attr = html.match(attribute))
-      ) {
-        advance(attr[0].length);
-        match.attrs.push({
-          name: attr[1],
-          value: attr[3] || attr[4] || attr[5],
-        });
-      }
-      if (end) {
-        advance(end[0].length);
-      }
-      return match;
-    }
-    return false; //不是开始标签就返回
-  }
-// 循环解析html内容
-  while (html) {
-    // 如果 indexOf的索引是0，则说明是个开始或者结束标签
-    // 如果 indexOf的索引 > 0，则说明时文本的结束位置
-    let textEnd = html.indexOf("<");
-    if (textEnd == 0) {
-      const startTagMatch = parseStartTag(); //开始标签的解析结果
-      if(startTagMatch) { //解析到开始标签
-        start(startTagMatch.tagName, startTagMatch.attrs)
-        continue;
-      }
-     let endTagMatch =  html.match(endTag);//结束标签；
-     if(endTagMatch){
-       advance(endTagMatch[0].length);
-       end(endTagMatch[0])
-       continue;
-     }
-    }
-    if(textEnd > 0){
-      let text = html.substring(0, textEnd); //文本内容
-      if(text) {
-        chars(text);
-        advance(text.length) //解析到的文本
-      }
-      continue;
-    }
-  }
+function codegen(ast) {
+  let children = genChildren(ast);
+  let code = `_c("${ast.tag}",${
+    ast.attrs.length > 0 ? genProps(ast.attrs) : null
+  }${ast.children.length ? `,${children}` : ""}
+  )`;
+  return code;
 }
 
 export function compileToFunction(template) {
   // 将template 转化成ast语法树
   let ast = parseHTML(template);
   // 生成render方法 （render方法返回结果就是 虚拟dom)
+
+  // 模板引擎实现原理: with + new Function
+  let code = codegen(ast);
+  // with (Math) {
+  //   a = PI * r * r;
+  //   x = r * cos(PI);
+  //   y = r * sin(PI / 2);
+  // }
+  code = `with(this){ return ${code} }`;
+  let render = new Function(code);
+  return render;
+  // render () {
+  //   return _c("div",{
+  //     id:"app"
+  //   },_c("div",{style:"red"}),_v(_s(name)+hello))
+  // }
 }
